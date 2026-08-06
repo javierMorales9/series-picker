@@ -1,0 +1,32 @@
+{
+  "name": "series-raqui",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "dotenvx run -- bun --filter @series-raqui/web dev",
+    "build": "dotenvx run -- bun --filter @series-raqui/web build",
+    "start": "dotenvx run -- bun --filter @series-raqui/web start",
+    "typecheck": "tsc --noEmit",
+    "check": "biome check apps/cli/src apps/worker/src apps/web/src apps/shared packages scripts",
+    "format": "biome format --write apps/cli/src apps/worker/src apps/web/src apps/shared packages scripts",
+    "test": "bun test",
+    "db:migrate": "dotenvx run -- bun apps/cli/src/db.ts migrate",
+    "db:status": "dotenvx run -- bun apps/cli/src/db.ts status",
+    "db:reset": "dotenvx run -- bun apps/cli/src/db.ts reset",
+    "db:seed": "dotenvx run -- bun scripts/seed-demo.ts",
+    "series": "dotenvx run -- bun apps/cli/src/index.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "latest",
+    "@dotenvx/dotenvx": "^2.19.2",
+    "@types/bun": "latest",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "bun": "latest",
+    "typescript": "5.9.3"
+  }
+}

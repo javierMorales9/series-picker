@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "types": ["bun-types"],
+    "baseUrl": ".",
+    "paths": {
+      "@series-raqui/domain": ["packages/domain/src/index.ts"],
+      "@series-raqui/application": ["packages/application/src/index.ts"],
+      "@series-raqui/database": ["packages/database/src/index.ts"],
+      "@series-raqui/tmdb": ["packages/tmdb/src/index.ts"],
+      "@series-raqui/jobs": ["packages/jobs/src/index.ts"],
+      "@series-raqui/config": ["packages/config/src/index.ts"]
+    }
+  },
+  "include": [
+    "apps/**/*.ts",
+    "apps/**/*.tsx",
+    "packages/**/*.ts",
+    "tests/**/*.ts"
+  ]
+}
