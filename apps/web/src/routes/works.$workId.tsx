@@ -1,8 +1,17 @@
+import type { OptionKind } from "@series-raqui/domain";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import {
+  type EntryDetails,
+  EntryDetailsDialog,
+} from "../components/EntryDetailsDialog.tsx";
+import {
   advanceFn,
   discardFn,
+  optionValuesFn,
+  regressFn,
+  rewatchWorkFn,
+  setDefaultOptionFn,
   syncWorkFn,
   transitionFn,
   updateEntryDetailsFn,
@@ -10,7 +19,11 @@ import {
 } from "../server/functions.ts";
 
 export const Route = createFileRoute("/works/$workId")({
-  loader: ({ params }) => workDetailsFn({ data: { id: params.workId } }),
+  loader: ({ params }) =>
+    Promise.all([
+      workDetailsFn({ data: { id: params.workId } }),
+      optionValuesFn(),
+    ]).then(([aggregate, options]) => ({ aggregate, options })),
   component: WorkPage,
 });
 
@@ -26,11 +39,84 @@ const labels: Record<string, string> = {
   discarded: "Descartada",
 };
 
+const advanceLabels: Record<string, string> = {
+  unplanned: "Seleccionar",
+  selected: "Marcar lista",
+  ready: "Empezar",
+  watching: "Terminar",
+};
+
+const availabilityLabels: Record<string, string> = {
+  unknown: "Disponibilidad desconocida",
+  available: "Disponible",
+  unavailable: "No disponible",
+};
+
+const busyTitle = "Espera a que termine la operación en curso.";
+
+const tmdbWorkUrl = (work: { tmdbType: "tv" | "movie"; tmdbId: number }) =>
+  `https://www.themoviedb.org/${work.tmdbType}/${work.tmdbId}`;
+
+const tmdbEntryUrl = (
+  work: { tmdbType: "tv" | "movie"; tmdbId: number },
+  entry: { type: "season" | "movie"; seasonNumber: number | null },
+) => {
+  if (entry.type === "season" && entry.seasonNumber !== null) {
+    return `${tmdbWorkUrl(work)}/season/${entry.seasonNumber}`;
+  }
+  return tmdbWorkUrl(work);
+};
+
+function TmdbLink({ href }: { href: string }) {
+  return (
+    <a
+      className="tmdb-link"
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      title="Ver en TMDB"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path
+          d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+      <span className="sr-only">Ver en TMDB</span>
+    </a>
+  );
+}
+
+const dateFormatter = new Intl.DateTimeFormat("es-ES", {
+  dateStyle: "medium",
+});
+
+function formatDate(value: string | null) {
+  return value ? dateFormatter.format(new Date(value)) : null;
+}
+
 function WorkPage() {
-  const aggregate = Route.useLoaderData();
+  const { aggregate, options } = Route.useLoaderData();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const canDiscard = ![
+    "watching",
+    "started",
+    "completed",
+    "abandoned",
+  ].includes(aggregate.work.status);
+  const discardTitle = busy
+    ? busyTitle
+    : canDiscard
+      ? undefined
+      : "No se puede descartar una Obra que ya has empezado a ver.";
+  const editing = aggregate.entries.find((entry) => entry.id === editingId);
   async function action(fn: () => Promise<unknown>) {
     setBusy(true);
     setError(null);
@@ -57,47 +143,12 @@ function WorkPage() {
         discardFn({ data: { workId: aggregate.work.id, reason } }),
       );
   }
-  async function editDetails(entry: {
-    id: string;
-    locations: string[];
-    platforms: string[];
-    availability: "unknown" | "available" | "unavailable";
-  }) {
-    const locations = prompt(
-      "Lugares separados por comas:",
-      entry.locations.join(", "),
-    );
-    if (locations === null) return;
-    const platforms = prompt(
-      "Plataformas separadas por comas:",
-      entry.platforms.join(", "),
-    );
-    if (platforms === null) return;
-    const availability = prompt(
-      "Disponibilidad: available, unavailable o unknown",
-      entry.availability,
-    );
-    if (
-      !availability ||
-      !["available", "unavailable", "unknown"].includes(availability)
-    )
-      return;
-    await action(() =>
-      updateEntryDetailsFn({
-        data: {
-          entryId: entry.id,
-          locations: locations
-            .split(",")
-            .map((v) => v.trim())
-            .filter(Boolean),
-          platforms: platforms
-            .split(",")
-            .map((v) => v.trim())
-            .filter(Boolean),
-          availability: availability as "unknown" | "available" | "unavailable",
-        },
-      }),
-    );
+  async function saveDetails(entryId: string, details: EntryDetails) {
+    setEditingId(null);
+    await action(() => updateEntryDetailsFn({ data: { entryId, ...details } }));
+  }
+  async function setDefaultOption(kind: OptionKind, value: string | null) {
+    await action(() => setDefaultOptionFn({ data: { kind, value } }));
   }
   return (
     <div className="page">
@@ -112,7 +163,10 @@ function WorkPage() {
           <p className="eyebrow">
             {aggregate.work.type === "series" ? "Serie" : "Película"}
           </p>
-          <h1>{aggregate.work.name}</h1>
+          <h1 className="titled">
+            {aggregate.work.name}
+            <TmdbLink href={tmdbWorkUrl(aggregate.work)} />
+          </h1>
           <p className={`pill ${aggregate.work.status}`}>
             {labels[aggregate.work.status]}
           </p>
@@ -125,6 +179,7 @@ function WorkPage() {
                 )
               }
               disabled={busy}
+              title={busy ? busyTitle : undefined}
             >
               Sincronizar
             </button>
@@ -132,17 +187,24 @@ function WorkPage() {
               type="button"
               className="secondary"
               onClick={discard}
-              disabled={busy}
+              disabled={busy || !canDiscard}
+              title={discardTitle}
             >
               Descartar
             </button>
-            {aggregate.work.posterPath && (
-              <a
-                className="button secondary"
-                href={`/api/poster?path=${encodeURIComponent(aggregate.work.posterPath)}&size=original&name=${encodeURIComponent(aggregate.work.name)}`}
+            {aggregate.work.status === "completed" && (
+              <button
+                type="button"
+                onClick={() =>
+                  action(() =>
+                    rewatchWorkFn({ data: { workId: aggregate.work.id } }),
+                  )
+                }
+                disabled={busy}
+                title={busy ? busyTitle : undefined}
               >
-                Carátula original
-              </a>
+                Volver a ver
+              </button>
             )}
           </div>
           {error && <p className="error">{error}</p>}
@@ -159,27 +221,47 @@ function WorkPage() {
           {aggregate.entries.map((entry) => (
             <article className="entry" key={entry.id}>
               <div>
-                <strong>{entry.name}</strong>
+                <strong className="titled">
+                  {entry.name}
+                  <TmdbLink href={tmdbEntryUrl(aggregate.work, entry)} />
+                </strong>
                 <p>
                   {entry.releaseDate ?? "Sin fecha"} · {labels[entry.status]}
                 </p>
+                {entry.lastWatchedAt && (
+                  <p>Vista por última vez: {formatDate(entry.lastWatchedAt)}</p>
+                )}
                 <p>
                   {entry.locations.join(", ") || "Lugar desconocido"}
                   {entry.platforms.length
                     ? ` · ${entry.platforms.join(", ")}`
                     : ""}{" "}
-                  · {entry.availability}
+                  · {availabilityLabels[entry.availability]}
                 </p>
               </div>
               <div className="actions">
                 <button
                   type="button"
                   className="secondary"
-                  onClick={() => editDetails(entry)}
+                  onClick={() => setEditingId(entry.id)}
                   disabled={busy}
+                  title={busy ? busyTitle : undefined}
                 >
                   Editar datos
                 </button>
+                {entry.status !== "unplanned" && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() =>
+                      action(() => regressFn({ data: { entryId: entry.id } }))
+                    }
+                    disabled={busy}
+                    title={busy ? busyTitle : undefined}
+                  >
+                    Paso anterior
+                  </button>
+                )}
                 {!["watched", "abandoned"].includes(entry.status) && (
                   <button
                     type="button"
@@ -187,8 +269,9 @@ function WorkPage() {
                       action(() => advanceFn({ data: { entryId: entry.id } }))
                     }
                     disabled={busy}
+                    title={busy ? busyTitle : undefined}
                   >
-                    Siguiente paso
+                    {advanceLabels[entry.status]}
                   </button>
                 )}
                 {entry.status === "watching" && (
@@ -197,6 +280,7 @@ function WorkPage() {
                     className="danger"
                     onClick={() => abandon(entry.id)}
                     disabled={busy}
+                    title={busy ? busyTitle : undefined}
                   >
                     Abandonar
                   </button>
@@ -206,6 +290,22 @@ function WorkPage() {
           ))}
         </div>
       </section>
+      {editing && (
+        <EntryDetailsDialog
+          key={editing.id}
+          entryName={editing.name}
+          details={{
+            locations: editing.locations,
+            platforms: editing.platforms,
+            availability: editing.availability,
+          }}
+          options={options}
+          busy={busy}
+          onSave={(details) => saveDetails(editing.id, details)}
+          onSetDefault={setDefaultOption}
+          onClose={() => setEditingId(null)}
+        />
+      )}
     </div>
   );
 }

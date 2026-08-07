@@ -1,11 +1,12 @@
-import type { EntryStatus, TmdbType } from "@series-raqui/domain";
+import type { DashboardFilters } from "@series-raqui/application";
+import type { EntryStatus, OptionKind, TmdbType } from "@series-raqui/domain";
 import { JobCoordinator } from "@series-raqui/jobs";
 import { createServerFn } from "@tanstack/react-start";
 import { getContext } from "./context.ts";
 
-export const dashboardFn = createServerFn({ method: "GET" }).handler(() =>
-  getContext().app.getDashboard(),
-);
+export const dashboardFn = createServerFn({ method: "GET" })
+  .validator((data?: DashboardFilters) => data ?? {})
+  .handler(({ data }) => getContext().app.getDashboard(data));
 
 export const searchFn = createServerFn({ method: "GET" })
   .validator((data: { query: string }) => data)
@@ -33,6 +34,14 @@ export const advanceFn = createServerFn({ method: "POST" })
   .validator((data: { entryId: string }) => data)
   .handler(({ data }) => getContext().app.advanceEntry(data.entryId));
 
+export const regressFn = createServerFn({ method: "POST" })
+  .validator((data: { entryId: string }) => data)
+  .handler(({ data }) => getContext().app.regressEntry(data.entryId));
+
+export const rewatchWorkFn = createServerFn({ method: "POST" })
+  .validator((data: { workId: string }) => data)
+  .handler(({ data }) => getContext().app.rewatchWork(data.workId));
+
 export const updateEntryDetailsFn = createServerFn({ method: "POST" })
   .validator(
     (data: {
@@ -44,6 +53,16 @@ export const updateEntryDetailsFn = createServerFn({ method: "POST" })
   )
   .handler(({ data }) =>
     getContext().app.updateEntryDetails(data.entryId, data),
+  );
+
+export const optionValuesFn = createServerFn({ method: "GET" }).handler(() =>
+  getContext().app.listOptionValues(),
+);
+
+export const setDefaultOptionFn = createServerFn({ method: "POST" })
+  .validator((data: { kind: OptionKind; value: string | null }) => data)
+  .handler(({ data }) =>
+    getContext().app.setDefaultOptionValue(data.kind, data.value),
   );
 
 export const discardFn = createServerFn({ method: "POST" })

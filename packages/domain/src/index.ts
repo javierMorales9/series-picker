@@ -17,6 +17,12 @@ export type WorkStatus =
   | "abandoned"
   | "discarded";
 export type Availability = "unknown" | "available" | "unavailable";
+export type OptionKind = "location" | "platform";
+
+export interface OptionValue {
+  value: string;
+  isDefault: boolean;
+}
 
 export interface Work {
   id: string;
@@ -83,6 +89,15 @@ const forwardTransitions: Record<EntryStatus, EntryStatus | null> = {
   abandoned: null,
 };
 
+const backwardTransitions: Record<EntryStatus, EntryStatus | null> = {
+  unplanned: null,
+  selected: "unplanned",
+  ready: "selected",
+  watching: "ready",
+  watched: "watching",
+  abandoned: "watching",
+};
+
 export function nextEntryStatus(status: EntryStatus): EntryStatus {
   const next = forwardTransitions[status];
   if (!next) {
@@ -92,6 +107,17 @@ export function nextEntryStatus(status: EntryStatus): EntryStatus {
     );
   }
   return next;
+}
+
+export function previousEntryStatus(status: EntryStatus): EntryStatus {
+  const previous = backwardTransitions[status];
+  if (!previous) {
+    throw new DomainError(
+      "ENTRY_HAS_NO_PREVIOUS_STATUS",
+      `No hay un estado anterior para ${status}.`,
+    );
+  }
+  return previous;
 }
 
 export interface TransitionOptions {
@@ -151,12 +177,16 @@ export function transitionEntry(
     updatedAt: now,
   };
 
+  const entries = aggregate.entries.map((candidate) =>
+    candidate.id === entryId ? changed : candidate,
+  );
+  const selectedNext =
+    target === "watched" ? selectNextUnplannedEntry(entries, changed) : entries;
+
   return recalculateAggregate(
     {
       work: aggregate.work,
-      entries: aggregate.entries.map((candidate) =>
-        candidate.id === entryId ? changed : candidate,
-      ),
+      entries: selectedNext,
     },
     now,
   );
@@ -164,6 +194,82 @@ export function transitionEntry(
 
 function nextEntryStatusOrNull(status: EntryStatus): EntryStatus | null {
   return forwardTransitions[status];
+}
+
+function selectNextUnplannedEntry(entries: Entry[], watched: Entry): Entry[] {
+  if (!watched.countsTowardsProgress) return entries;
+  const next = entries
+    .filter(
+      (entry) =>
+        entry.workId === watched.workId &&
+        entry.countsTowardsProgress &&
+        entry.position > watched.position,
+    )
+    .sort((a, b) => a.position - b.position)[0];
+  if (!next || next.status !== "unplanned") return entries;
+  return entries.map((entry) =>
+    entry.id === next.id
+      ? { ...entry, status: "selected", updatedAt: watched.updatedAt }
+      : entry,
+  );
+}
+
+export function regressEntry(
+  aggregate: WorkAggregate,
+  entryId: string,
+  now = new Date().toISOString(),
+): WorkAggregate {
+  const entry = aggregate.entries.find((candidate) => candidate.id === entryId);
+  if (!entry)
+    throw new DomainError("ENTRY_NOT_FOUND", "No se encontró la Entrega.");
+  return transitionEntry(aggregate, entryId, previousEntryStatus(entry.status), {
+    force: true,
+    now,
+  });
+}
+
+export function rewatchWork(
+  aggregate: WorkAggregate,
+  now = new Date().toISOString(),
+): WorkAggregate {
+  const counted = aggregate.entries
+    .filter((entry) => entry.countsTowardsProgress)
+    .sort((a, b) => a.position - b.position);
+  if (counted.length === 0) {
+    throw new DomainError(
+      "WORK_HAS_NO_PROGRESS_ENTRIES",
+      "La Obra no tiene Entregas que cuenten para progreso.",
+    );
+  }
+  if (!counted.every((entry) => entry.status === "watched")) {
+    throw new DomainError(
+      "WORK_IS_NOT_COMPLETED",
+      "Solo se puede volver a ver una Obra finalizada.",
+    );
+  }
+  const first = counted[0];
+  if (!first) {
+    throw new DomainError(
+      "WORK_HAS_NO_PROGRESS_ENTRIES",
+      "La Obra no tiene Entregas que cuenten para progreso.",
+    );
+  }
+  return recalculateAggregate(
+    {
+      work: { ...aggregate.work, discardReason: null, updatedAt: now },
+      entries: aggregate.entries.map((entry) =>
+        entry.countsTowardsProgress
+          ? {
+              ...entry,
+              status: entry.id === first.id ? "selected" : "unplanned",
+              abandonmentReason: null,
+              updatedAt: now,
+            }
+          : entry,
+      ),
+    },
+    now,
+  );
 }
 
 export function discardWork(

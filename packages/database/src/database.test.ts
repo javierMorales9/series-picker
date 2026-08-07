@@ -78,6 +78,36 @@ describe("SQLite", () => {
     db.close();
   });
 
+  test("guarda opciones, una sola por defecto y recoge las ya escritas", () => {
+    const { db, works, options } = setup();
+    options.addMany("location", ["Salón", "Salón", " Cama ", ""]);
+    expect(options.list("location").map((o) => o.value)).toEqual([
+      "Cama",
+      "Salón",
+    ]);
+
+    options.setDefault("location", "Salón");
+    options.setDefault("location", "Cama");
+    expect(options.list("location").filter((o) => o.isDefault)).toEqual([
+      { value: "Cama", isDefault: true },
+    ]);
+
+    options.setDefault("location", null);
+    expect(options.list("location").some((o) => o.isDefault)).toBe(false);
+
+    const base = fixture();
+    const entry = base.entries[0];
+    if (!entry) throw new Error("La fixture no tiene entregas.");
+    works.save({
+      ...base,
+      entries: [{ ...entry, locations: ["Cine"], platforms: ["Netflix"] }],
+    });
+    const { options: reopened } = createRepositories(db);
+    expect(reopened.list("location").map((o) => o.value)).toContain("Cine");
+    expect(reopened.list("platform").map((o) => o.value)).toEqual(["Netflix"]);
+    db.close();
+  });
+
   test("impide dos syncs activos", () => {
     const { db, jobs } = setup();
     jobs.create("cli");

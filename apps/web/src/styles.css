@@ -144,10 +144,12 @@ button:disabled {
 }
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 1.2rem;
 }
 .card {
+  display: flex;
+  flex-direction: column;
   background: #191e19;
   border: 1px solid #ffffff12;
   border-radius: 18px;
@@ -159,6 +161,48 @@ button:disabled {
 .card:hover {
   transform: translateY(-4px);
   border-color: #d7ff6366;
+}
+/* El enlace crece para que los botones queden pegados abajo y alineados
+   entre todas las tarjetas de la misma fila. */
+.card > a {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.card .card-actions {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0 0.9rem 0.9rem;
+}
+.card .card-actions button {
+  flex: 1;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.85rem;
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin: 2rem 0 1rem;
+  padding: 0.75rem 0;
+  position: sticky;
+  top: 72px;
+  z-index: 4;
+  background: #101310e6;
+  backdrop-filter: blur(14px);
+}
+.filters select {
+  background: #1b201b;
+  border: 1px solid #ffffff1c;
+  border-radius: 999px;
+  padding: 0.7rem 1rem;
+  color: inherit;
+  font: inherit;
+}
+.filters select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .card img,
 .poster {
@@ -202,6 +246,103 @@ button:disabled {
   align-items: center;
   flex-wrap: wrap;
   margin-top: 1rem;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.titled {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.tmdb-link {
+  display: inline-flex;
+  color: #8f9a8c;
+  transition: 0.15s color;
+}
+.tmdb-link:hover {
+  color: #d7ff63;
+}
+.tmdb-link svg {
+  width: 1em;
+  height: 1em;
+  max-width: 22px;
+  max-height: 22px;
+}
+.entry .tmdb-link svg {
+  width: 15px;
+  height: 15px;
+}
+.details-dialog {
+  width: min(440px, calc(100vw - 2rem));
+  border: 1px solid #ffffff1c;
+  border-radius: 18px;
+  background: #191e19;
+  color: #f3f2ed;
+  padding: 1.5rem;
+}
+.details-dialog::backdrop {
+  background: #0b0d0bb0;
+}
+.details-dialog h3 {
+  margin: 0 0 1rem;
+}
+.details-dialog select,
+.details-dialog input {
+  flex: 1;
+  min-width: 0;
+  background: #1b201b;
+  border: 1px solid #ffffff1c;
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  color: inherit;
+  font: inherit;
+}
+.details-dialog select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.field {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+.field-label {
+  font-weight: 750;
+  font-size: 0.85rem;
+}
+.field-row {
+  display: flex;
+  gap: 0.5rem;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #2a3029;
+  border-radius: 99px;
+  padding: 0.25rem 0.35rem 0.25rem 0.7rem;
+  font-size: 0.85rem;
+}
+.chip-remove {
+  background: none;
+  color: #b9c2b6;
+  padding: 0 0.25rem;
+  font-weight: 750;
+  line-height: 1;
+}
+.chip-remove:hover {
+  color: #f18779;
 }
 .entries {
   display: grid;

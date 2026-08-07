@@ -89,19 +89,28 @@ export class TmdbClient implements MetadataProvider {
 
   private async getSeries(id: number): Promise<ExternalWork> {
     const item = await this.request<any>(`/tv/${id}?language=es-ES`);
-    const entries: ExternalEntry[] = (item.seasons as any[])
-      .filter((season) => this.released(season.air_date))
+    const seasons = (item.seasons as any[]).filter((season) =>
+      this.released(season.air_date),
+    );
+    // Los especiales son la temporada 0 en TMDB, pero se ven al final.
+    const lastPosition = Math.max(
+      0,
+      ...seasons.map((season) => season.season_number as number),
+    );
+    const entries: ExternalEntry[] = seasons
       .map((season) => ({
         tmdbId: season.id,
         type: "season" as const,
         name: season.name || `T${season.season_number}`,
         originalName: null,
-        position: season.season_number,
+        position:
+          season.season_number === 0 ? lastPosition + 1 : season.season_number,
         seasonNumber: season.season_number,
         releaseDate: season.air_date || null,
         posterPath: season.poster_path ?? null,
         countsTowardsProgress: season.season_number !== 0,
-      }));
+      }))
+      .sort((a, b) => a.position - b.position);
     return {
       tmdbType: "tv",
       tmdbId: item.id,

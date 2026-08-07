@@ -6,10 +6,17 @@ import type {
   JobItem,
   JobRepository,
   JobStatus,
+  OptionRepository,
   WorkRepository,
   WorkSummary,
 } from "@series-raqui/application";
-import type { Entry, Work, WorkAggregate } from "@series-raqui/domain";
+import type {
+  Entry,
+  OptionKind,
+  OptionValue,
+  Work,
+  WorkAggregate,
+} from "@series-raqui/domain";
 import { migrate, migrations } from "./migrations.ts";
 
 export function openDatabase(path: string): Database {
@@ -97,15 +104,34 @@ export class SqliteWorkRepository implements WorkRepository {
     ).map((row) => this.aggregate(mapWork(row)));
   }
   listSummaries(statuses?: Work["status"][]): WorkSummary[] {
+    // La Entrega accionable es la actual mientras quede algo que hacer con
+    // ella; si ya está vista (Obra empezada con temporadas nuevas, o sin
+    // empezar), la primera pendiente. Como último recurso, la actual.
     const rows = this.db
       .query(`
       SELECT w.*,
         COUNT(CASE WHEN e.counts_towards_progress = 1 THEN 1 END) total_entries,
         COUNT(CASE WHEN e.counts_towards_progress = 1 AND e.status = 'watched' THEN 1 END) watched_entries,
-        ce.name current_entry_name
+        ce.name current_entry_name,
+        ne.id next_entry_id,
+        ne.name next_entry_name,
+        ne.status next_entry_status,
+        ne.locations next_entry_locations,
+        ne.platforms next_entry_platforms,
+        ne.availability next_entry_availability
       FROM works w
       LEFT JOIN entries e ON e.work_id = w.id
       LEFT JOIN entries ce ON ce.id = w.current_entry_id
+      LEFT JOIN entries ne ON ne.id = COALESCE(
+        (SELECT id FROM entries
+          WHERE id = w.current_entry_id
+            AND status NOT IN ('watched','abandoned')),
+        (SELECT id FROM entries
+          WHERE work_id = w.id AND counts_towards_progress = 1
+            AND status NOT IN ('watched','abandoned')
+          ORDER BY position LIMIT 1),
+        w.current_entry_id
+      )
       GROUP BY w.id
       ORDER BY w.updated_at DESC
     `)
@@ -117,6 +143,12 @@ export class SqliteWorkRepository implements WorkRepository {
         totalEntries: row.total_entries,
         watchedEntries: row.watched_entries,
         currentEntryName: row.current_entry_name,
+        nextEntryId: row.next_entry_id,
+        nextEntryName: row.next_entry_name,
+        nextEntryStatus: row.next_entry_status,
+        nextEntryLocations: parseArray(row.next_entry_locations ?? "[]"),
+        nextEntryPlatforms: parseArray(row.next_entry_platforms ?? "[]"),
+        nextEntryAvailability: row.next_entry_availability,
       }));
   }
   save(aggregate: WorkAggregate): void {
@@ -373,9 +405,71 @@ export class SqliteJobRepository implements JobRepository {
   }
 }
 
+export class SqliteOptionRepository implements OptionRepository {
+  constructor(private readonly db: Database) {}
+  list(kind: OptionKind): OptionValue[] {
+    return (
+      this.db
+        .query(
+          "SELECT value, is_default FROM option_values WHERE kind=? ORDER BY value COLLATE NOCASE",
+        )
+        .all(kind) as any[]
+    ).map((row) => ({ value: row.value, isDefault: Boolean(row.is_default) }));
+  }
+  addMany(kind: OptionKind, values: string[]): void {
+    const clean = [
+      ...new Set(values.map((value) => value.trim()).filter(Boolean)),
+    ];
+    if (!clean.length) return;
+    const now = new Date().toISOString();
+    this.db.transaction(() => {
+      for (const value of clean)
+        this.db
+          .query(
+            "INSERT OR IGNORE INTO option_values(id,kind,value,is_default,created_at) VALUES(?,?,?,0,?)",
+          )
+          .run(crypto.randomUUID(), kind, value, now);
+    })();
+  }
+  setDefault(kind: OptionKind, value: string | null): void {
+    this.db.transaction(() => {
+      this.db
+        .query("UPDATE option_values SET is_default=0 WHERE kind=?")
+        .run(kind);
+      if (value?.trim())
+        this.db
+          .query(
+            "UPDATE option_values SET is_default=1 WHERE kind=? AND value=?",
+          )
+          .run(kind, value.trim());
+    })();
+  }
+}
+
+/**
+ * Los valores de lugar y plataforma vivían solo dentro de cada Entrega. Los
+ * recogemos al arrancar para que el selector ofrezca todo lo ya escrito.
+ */
+function backfillOptionValues(db: Database, options: OptionRepository): void {
+  const rows = db.query("SELECT locations, platforms FROM entries").all() as
+    | Array<{ locations: string; platforms: string }>
+    | [];
+  options.addMany(
+    "location",
+    rows.flatMap((row) => parseArray(row.locations)),
+  );
+  options.addMany(
+    "platform",
+    rows.flatMap((row) => parseArray(row.platforms)),
+  );
+}
+
 export function createRepositories(db: Database) {
+  const options = new SqliteOptionRepository(db);
+  backfillOptionValues(db, options);
   return {
     works: new SqliteWorkRepository(db),
     jobs: new SqliteJobRepository(db),
+    options,
   };
 }

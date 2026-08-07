@@ -46,8 +46,14 @@ function Root() {
           <Outlet />
         </main>
         <footer>
-          Este producto utiliza la API de TMDB, pero no está respaldado ni
-          certificado por TMDB.
+          Hecho por{" "}
+          <a
+            href="https://github.com/javierMorales9"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Javier Morales
+          </a>
         </footer>
         <Scripts />
       </body>

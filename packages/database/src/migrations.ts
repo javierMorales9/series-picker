@@ -96,6 +96,24 @@ export const migrations: Migration[] = [
       );
     `,
   },
+  {
+    version: 2,
+    name: "option_values",
+    sql: `
+      CREATE TABLE option_values (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('location','platform')),
+        value TEXT NOT NULL,
+        is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0,1)),
+        created_at TEXT NOT NULL,
+        UNIQUE (kind, value)
+      );
+
+      CREATE UNIQUE INDEX option_values_single_default
+      ON option_values(kind)
+      WHERE is_default = 1;
+    `,
+  },
 ];
 
 export function migrate(db: Database): number[] {

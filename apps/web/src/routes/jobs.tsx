@@ -49,7 +49,12 @@ function Jobs() {
           <p className="eyebrow">Operaciones</p>
           <h1>Sincronización</h1>
         </div>
-        <button type="button" onClick={start} disabled={Boolean(active)}>
+        <button
+          type="button"
+          onClick={start}
+          disabled={Boolean(active)}
+          title={active ? "Ya hay una sincronización en curso." : undefined}
+        >
           Actualizar todo
         </button>
       </section>

@@ -32,7 +32,7 @@ describe("TMDB", () => {
     expect(results).toHaveLength(1);
     expect(results[0]?.tmdbType).toBe("tv");
   });
-  test("excluye temporadas futuras y mantiene especiales estrenados", async () => {
+  test("excluye temporadas futuras y deja los especiales al final", async () => {
     const client = new TmdbClient(
       "token",
       async () =>
@@ -61,6 +61,13 @@ describe("TMDB", () => {
               id: 12,
               season_number: 2,
               name: "T2",
+              air_date: "2021-01-01",
+              poster_path: null,
+            },
+            {
+              id: 13,
+              season_number: 3,
+              name: "T3",
               air_date: "2999-01-01",
               poster_path: null,
             },
@@ -68,8 +75,15 @@ describe("TMDB", () => {
         }) as any,
     );
     const work = await client.getWork("tv", 1);
-    expect(work.entries).toHaveLength(2);
-    expect(work.entries[0]?.countsTowardsProgress).toBe(false);
+    expect(work.entries.map((entry) => entry.name)).toEqual([
+      "T1",
+      "T2",
+      "Especiales",
+    ]);
+    expect(work.entries.map((entry) => entry.position)).toEqual([1, 2, 3]);
+    const especiales = work.entries.at(-1);
+    expect(especiales?.seasonNumber).toBe(0);
+    expect(especiales?.countsTowardsProgress).toBe(false);
   });
   test("no añade películas futuras", async () => {
     const client = new TmdbClient(
