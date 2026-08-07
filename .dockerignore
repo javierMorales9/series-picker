@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+.git
+.data
+dist
+**/dist
+.env
+*.log
+coverage
+.output
+.tanstack
+PLAN.md

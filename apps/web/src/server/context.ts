@@ -9,6 +9,6 @@ export function getContext(): Context {
   const existing = globals[key];
   if (existing) return existing;
   const context = bootstrap();
-  // globals[key] = context;
+  globals[key] = context;
   return context;
 }
