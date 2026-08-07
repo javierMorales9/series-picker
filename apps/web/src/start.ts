@@ -3,21 +3,32 @@ import {
   createMiddleware,
   createStart,
 } from "@tanstack/react-start";
+import { handleApi } from "./server/api.ts";
 import {
   attemptLogin,
   expiredSessionCookie,
+  isApiEnabled,
   isAuthenticated,
   lockoutRemainingMs,
+  matchesApiToken,
   sessionCookie,
 } from "./server/auth.ts";
 
 const LOGIN_PATH = "/login";
 const LOGOUT_PATH = "/logout";
+const API_PREFIX = "/api/";
 
 function redirect(location: string, cookie?: string): Response {
   const headers = new Headers({ location });
   if (cookie) headers.set("set-cookie", cookie);
   return new Response(null, { status: 303, headers });
+}
+
+function jsonError(code: string, message: string, status: number): Response {
+  return new Response(JSON.stringify({ error: { code, message } }, null, 2), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8" },
+  });
 }
 
 /** Sólo admitimos rutas internas para que nadie use ?redirect= como salto a otro dominio. */
@@ -56,6 +67,16 @@ const authMiddleware = createMiddleware({ type: "request" }).server(
     const secure =
       new URL(request.url).protocol === "https:" ||
       request.headers.get("x-forwarded-proto") === "https";
+
+    if (pathname.startsWith(API_PREFIX)) {
+      if (!isApiEnabled()) {
+        return jsonError("API_DISABLED", "La API no está configurada.", 404);
+      }
+      if (!matchesApiToken(request.headers.get("authorization"))) {
+        return jsonError("UNAUTHORIZED", "Token inválido o ausente.", 401);
+      }
+      return handleApi(request, new URL(request.url));
+    }
 
     if (pathname === LOGOUT_PATH) {
       return request.method === "POST"

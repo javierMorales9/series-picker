@@ -10,6 +10,8 @@ export interface AppConfig {
   authPassword: string;
   /** Clave derivada con la que se sella la cookie de sesión. Siempre 64 caracteres. */
   sessionSecret: string;
+  /** Token para la API de la CLI. Vacío significa que la API está apagada. */
+  apiToken: string;
 }
 
 export function workspaceRoot(): string {
@@ -62,5 +64,6 @@ export function loadConfig(
     port: Number(process.env.PORT || 3000),
     authPassword,
     sessionSecret,
+    apiToken: process.env.API_TOKEN?.trim() ?? "",
   };
 }

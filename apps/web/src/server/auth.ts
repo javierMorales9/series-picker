@@ -108,3 +108,26 @@ export async function sessionCookie(secure: boolean): Promise<string> {
 export function expiredSessionCookie(secure: boolean): string {
   return serializeCookie("", 0, secure);
 }
+
+/**
+ * La API va por token, no por cookie: un Bearer no lo manda el navegador solo,
+ * así que no hay CSRF que valga y la CLI no tiene que fingir una sesión.
+ * Sin API_TOKEN configurado la API queda apagada en vez de abierta.
+ */
+export function matchesApiToken(header: string | null): boolean {
+  const expected = loadConfig().apiToken;
+  if (!expected) return false;
+  const prefix = "Bearer ";
+  if (!header?.startsWith(prefix)) return false;
+  const given = Buffer.from(header.slice(prefix.length));
+  const wanted = Buffer.from(expected);
+  if (given.length !== wanted.length) {
+    timingSafeEqual(wanted, wanted);
+    return false;
+  }
+  return timingSafeEqual(given, wanted);
+}
+
+export function isApiEnabled(): boolean {
+  return loadConfig().apiToken !== "";
+}

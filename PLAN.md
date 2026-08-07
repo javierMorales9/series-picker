@@ -29,12 +29,11 @@ Ambas interfaces compartirán dominio, casos de uso, persistencia y acceso a TMD
 - En local, SQLite será un fichero dentro de `.data/`.
 - Notion queda fuera del sistema.
 - SQLite Cloud queda descartado.
-- Si se despliega en Railway, se utilizará inicialmente SQLite sobre un volumen persistente.
-- El despliegue se decidirá cuando la versión local sea funcional.
+- Está desplegado en Railway, con SQLite sobre un volumen persistente montado en `/data`.
 - La aplicación web utilizará TanStack Start.
 - Bun será runtime, gestor de paquetes y ejecutor de scripts.
-- La primera versión se ejecutará en local y no tendrá autenticación.
-- Antes de un despliegue público se añadirá autenticación.
+- La web está detrás de una contraseña única compartida; no hay usuarios ni datos por persona.
+- La CLI se autentica aparte, con un token Bearer contra `/api`.
 - TMDB se consultará en `es-ES`, con fallback al idioma original y a imágenes sin idioma.
 - Las carátulas utilizarán `w500` por defecto y permitirán descargar el original.
 - Las Entregas futuras no se crearán hasta que se puedan ver.
@@ -130,7 +129,8 @@ Casos de uso previstos:
 - `packages/database` implementará repositorios SQLite.
 - `packages/tmdb` implementará búsqueda y sincronización externa.
 - `packages/jobs` coordinará la creación, exclusión y progreso de trabajos.
-- Web, CLI y worker serán adaptadores finos que llamarán a los mismos casos de uso.
+- Web y worker serán adaptadores finos que llamarán a los mismos casos de uso.
+- La CLI es un cliente HTTP de la API de la web, que es quien llama a los casos de uso. Así sirve igual contra local que contra el despliegue, sin acceso al fichero SQLite.
 
 ## 5. Persistencia SQLite
 
@@ -454,15 +454,14 @@ Por defecto:
 series sync-all
 ```
 
-La propia CLI:
+La CLI ya no ejecuta el sync en su propio proceso, porque no tiene acceso al fichero SQLite. En su lugar:
 
-1. Crea el job.
-2. Ejecuta `syncAllWorks` en el mismo proceso.
-3. Muestra progreso.
-4. Actualiza SQLite.
-5. Termina con un código de salida apropiado.
+1. Llama a `POST /api/jobs/sync-all`, que crea el job y lanza el worker en el servidor.
+2. Sondea `GET /api/jobs/:jobId` cada dos segundos.
+3. Muestra progreso por stderr, y sólo si la salida es una terminal.
+4. Termina con código distinto de cero si el job no acaba en `completed`.
 
-La CLI no tendrá modo separado. Para una ejecución desacoplada se utilizará la aplicación web, cuyo proceso servidor permanece vivo mientras el worker puntual completa el job.
+Con `--no-wait` devuelve el job y termina. La espera tiene un tope de treinta minutos: si el worker muriese, el job se quedaría en `running` hasta que otro intento lo marcase interrumpido, y un cron que sondease se colgaría para siempre.
 
 ### 8.3. Exclusión mutua
 
@@ -532,32 +531,31 @@ Si se crea el job pero `Bun.spawn` falla:
 
 ## 9. CLI
 
-Nombre provisional: `series`.
+La CLI se llama `series` y es un cliente HTTP de `/api`. Se configura con `SERIES_API_URL` y `API_TOKEN`.
 
 ```text
+series status
+series list [--status <estado>]
 series search "Severance"
 series add --tmdb tv:95396
 series add --tmdb movie:157336
-series sync --work tv:95396
-series sync-all
-series next --entry <id>
+series advance --entry <id>          # alias: next
 series transition --entry <id> --to watched
+series edit-entry --entry <id> [--locations <csv>] [--platforms <csv>] [--availability <estado>]
 series abandon --entry <id> --reason "..."
 series discard --work <id> --reason "..."
-series jobs active
-series jobs show <id>
-series jobs cancel <id>
-series validate
+series sync-all [--no-wait]
 ```
 
 Requisitos:
 
 - Operaciones relevantes con `--json`.
 - `add` será un upsert.
-- Errores con códigos estables para agentes.
-- Operaciones forzadas pedirán confirmación salvo opción explícita.
+- Errores con códigos estables para agentes, que la API propaga tal cual.
 - `sync-all` limitará concurrencia y respetará `Retry-After`.
 - La salida resumirá cambios y errores por Obra.
+
+Fuera de la CLI, por poco uso frente al coste de mantener el endpoint: `sync` de una sola Obra, gestión de jobs (`jobs show`, `jobs cancel`) y `validate`. Se hacen desde la web o, en el despliegue, con `railway ssh`.
 
 ## 10. Aplicación web
 
@@ -609,35 +607,28 @@ Las consultas obtendrán conjuntamente Obras y Entregas, y construirán modelos 
 
 ## 11. Configuración
 
-Variables locales previstas:
-
-```text
-DATABASE_PATH=.data/series-raqui.sqlite
-TMDB_ACCESS_TOKEN=
-```
-
-Reglas:
+La tabla completa de variables está en el README. Reglas:
 
 - `.env` y `.data/` no se guardarán en Git.
 - Se proporcionará `.env.example`.
 - Los secretos solo se utilizarán en servidor, CLI o worker.
 - TanStack Start usará server functions/server-only para toda operación sensible.
+- Ningún secreto tendrá valor por defecto. `APP_PASSWORD` es obligatoria y sin `API_TOKEN` la API queda apagada, no abierta.
 
-## 12. Railway futuro
+## 12. Railway
 
-No se implementará hasta tener la versión local funcional.
-
-Diseño previsto:
+Desplegado como un único servicio construido con el `Dockerfile` del repositorio:
 
 - Un servicio persistente para la aplicación TanStack Start.
-- Un volumen montado, por ejemplo, en `/app/data`.
-- `DATABASE_PATH=/app/data/series-raqui.sqlite`.
-- El proceso hijo de sync se ejecutará dentro del mismo contenedor y accederá al mismo volumen.
-- Una única réplica de aplicación mientras se use SQLite sobre volumen.
-- Backups del volumen habilitados.
-- Autenticación obligatoria antes de exponer la aplicación.
+- Un volumen montado en `/data`, con `DATABASE_PATH=/data/series-raqui.sqlite`.
+- El proceso hijo de sync se ejecuta dentro del mismo contenedor y accede al mismo volumen.
+- Una única réplica mientras se use SQLite sobre volumen; el volumen ya la impone.
+- Migraciones al arrancar el contenedor, con el volumen ya montado.
+- Healthcheck contra `/login`, porque `/` responde 303 sin sesión.
 
 No se diseñará inicialmente para varias réplicas concurrentes. Si esa necesidad aparece, se reevaluará la persistencia y la ejecución de jobs.
+
+Pendiente: los backups no están automatizados. Un volumen de Railway no tiene snapshots.
 
 ## 13. Pruebas
 
@@ -730,13 +721,14 @@ No se diseñará inicialmente para varias réplicas concurrentes. Si esa necesid
 - Validar rendimiento y experiencia.
 - Documentar instalación y uso por agentes.
 
-### Fase 7 — Despliegue futuro
+### Fase 7 — Despliegue
 
-- Railway y volumen persistente.
-- Backups.
-- Autenticación.
-- Logs y health checks.
-- Prueba completa del worker puntual en contenedor.
+- Railway y volumen persistente. Hecho.
+- Autenticación. Hecha: contraseña compartida en la web, token Bearer en la API.
+- Health checks. Hecho: `/login`.
+- Prueba completa del worker puntual en contenedor. Hecha.
+- API para la CLI. Hecha, no estaba prevista: al vivir la base en el volumen, la CLI dejó de poder abrir el fichero.
+- Backups. Pendiente.
 
 ## 15. Criterios de aceptación de la primera versión
 
@@ -772,7 +764,6 @@ No se diseñará inicialmente para varias réplicas concurrentes. Si esa necesid
 - Varias réplicas de aplicación.
 - Relaciones entre películas, secuelas, precuelas, sagas, spin-offs o universos compartidos.
 - Historial completo de transiciones.
-- Despliegue antes de validar la versión local.
 
 ## 17. Orden exhaustivo de ejecución
 
