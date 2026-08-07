@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as JobsRouteImport } from './routes/jobs'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as WorksWorkIdRouteImport } from './routes/works.$workId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -23,6 +24,11 @@ const JobsRoute = JobsRouteImport.update({
   path: '/jobs',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WorksWorkIdRoute = WorksWorkIdRouteImport.update({
   id: '/works/$workId',
   path: '/works/$workId',
@@ -32,30 +38,34 @@ const WorksWorkIdRoute = WorksWorkIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/jobs': typeof JobsRoute
+  '/login': typeof LoginRoute
   '/works/$workId': typeof WorksWorkIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/jobs': typeof JobsRoute
+  '/login': typeof LoginRoute
   '/works/$workId': typeof WorksWorkIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/jobs': typeof JobsRoute
+  '/login': typeof LoginRoute
   '/works/$workId': typeof WorksWorkIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/jobs' | '/works/$workId'
+  fullPaths: '/' | '/jobs' | '/login' | '/works/$workId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/jobs' | '/works/$workId'
-  id: '__root__' | '/' | '/jobs' | '/works/$workId'
+  to: '/' | '/jobs' | '/login' | '/works/$workId'
+  id: '__root__' | '/' | '/jobs' | '/login' | '/works/$workId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   JobsRoute: typeof JobsRoute
+  LoginRoute: typeof LoginRoute
   WorksWorkIdRoute: typeof WorksWorkIdRoute
 }
 
@@ -75,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof JobsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/works/$workId': {
       id: '/works/$workId'
       path: '/works/$workId'
@@ -88,6 +105,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   JobsRoute: JobsRoute,
+  LoginRoute: LoginRoute,
   WorksWorkIdRoute: WorksWorkIdRoute,
 }
 export const routeTree = rootRouteImport
@@ -95,10 +113,11 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
+import type { startInstance } from './start.ts'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

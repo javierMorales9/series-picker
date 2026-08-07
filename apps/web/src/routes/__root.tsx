@@ -4,6 +4,7 @@ import {
   Link,
   Outlet,
   Scripts,
+  useRouterState,
 } from "@tanstack/react-router";
 import "../styles.css";
 
@@ -27,21 +28,31 @@ export const Route = createRootRoute({
 });
 
 function Root() {
+  const isLogin = useRouterState({
+    select: (state) => state.location.pathname === "/login",
+  });
   return (
     <html lang="es">
       <head>
         <HeadContent />
       </head>
       <body>
-        <header className="topbar">
-          <Link to="/" className="brand">
-            Series Raqui
-          </Link>
-          <nav>
-            <Link to="/">Biblioteca</Link>
-            <Link to="/jobs">Sincronización</Link>
-          </nav>
-        </header>
+        {isLogin ? null : (
+          <header className="topbar">
+            <Link to="/" className="brand">
+              Series Raqui
+            </Link>
+            <nav>
+              <Link to="/">Biblioteca</Link>
+              <Link to="/jobs">Sincronización</Link>
+              <form method="post" action="/logout">
+                <button type="submit" className="link-button">
+                  Salir
+                </button>
+              </form>
+            </nav>
+          </header>
+        )}
         <main>
           <Outlet />
         </main>

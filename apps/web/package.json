@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "bun --bun vite dev",
     "build": "bun --bun vite build",
-    "start": "bun --bun srvx --prod -s dist/client dist/server/server.js"
+    "start": "bun --bun srvx --prod -s ../client dist/server/server.js"
   },
   "dependencies": {
     "@tanstack/react-router": "^1.170.19",
