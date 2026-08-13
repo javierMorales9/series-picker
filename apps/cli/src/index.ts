@@ -3,6 +3,10 @@ import type { TmdbType } from "@series-raqui/domain";
 
 const args = process.argv.slice(2);
 const json = takeFlag("--json");
+// Se extraen ya aquí, antes de leer el comando, porque si van delante
+// (`series --url ... --token ... status`) serían el primer args.shift().
+const rawUrl = option("--url");
+const rawToken = option("--token");
 const command = args.shift();
 
 function takeFlag(name: string): boolean {
@@ -46,9 +50,10 @@ function output(value: unknown, message?: string) {
 function help() {
   console.log(`Series Raqui
 
-La CLI habla con la API de la instancia desplegada. Configura:
-  SERIES_API_URL   por defecto http://localhost:3000
-  API_TOKEN        el mismo valor que tenga el servicio
+La CLI habla por HTTP con la instancia. --url y --token son obligatorios,
+en cualquier posición, y no se leen de variables de entorno.
+
+Uso: series --url <url> --token <token> <comando> [opciones]
 
 series status [--json]
 series list [--status <estado>] [--json]
@@ -67,22 +72,14 @@ if (!command || command === "help" || command === "--help") {
   process.exit(0);
 }
 
-const baseUrl = (process.env.SERIES_API_URL || "http://localhost:3000").replace(
-  /\/+$/,
-  "",
-);
-const token = process.env.API_TOKEN?.trim();
+let baseUrl!: string;
+let token!: string;
 
 async function call(
   method: string,
   path: string,
   body?: unknown,
 ): Promise<unknown> {
-  if (!token)
-    throw Object.assign(
-      new Error("Falta API_TOKEN. Es el mismo valor que tenga el servicio."),
-      { code: "MISSING_API_TOKEN" },
-    );
   let response: Response;
   try {
     response = await fetch(`${baseUrl}${path}`, {
@@ -164,6 +161,9 @@ interface StatusResponse {
 }
 
 try {
+  baseUrl = required(rawUrl, "Falta --url.").replace(/\/+$/, "");
+  token = required(rawToken, "Falta --token.");
+
   switch (command) {
     case "status": {
       const result = (await call("GET", "/api/status")) as StatusResponse;

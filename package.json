@@ -18,7 +18,7 @@
     "db:status": "dotenvx run -- bun apps/cli/src/db.ts status",
     "db:reset": "dotenvx run -- bun apps/cli/src/db.ts reset",
     "db:seed": "dotenvx run -- bun scripts/seed-demo.ts",
-    "series": "dotenvx run -- bun apps/cli/src/index.ts"
+    "series": "bun apps/cli/src/index.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "latest",

@@ -6,4 +6,5 @@ dist/
 .tanstack/
 coverage/
 *.log
+/series
 

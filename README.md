@@ -36,24 +36,24 @@ Para cargar una Obra de demostración sin consultar TMDB: `bun run db:seed`.
 ## CLI y API
 
 La CLI no toca SQLite: habla por HTTP con la instancia desplegada, así que sirve
-igual contra local que contra Railway. Necesita dos variables:
+igual contra local que contra Railway. La CLI exige indicar la URL y el token en
+cada invocación, mediante `--url` y `--token` (en cualquier posición):
 
 ```text
-SERIES_API_URL   por defecto http://localhost:3000
-API_TOKEN        el mismo valor que tenga el servicio
+bun run series -- --url <url> --token <api-token> <comando> [opciones]
 ```
 
 ```text
-bun run series -- status
-bun run series -- list --status completed
-bun run series -- search "Severance"
-bun run series -- add --tmdb tv:95396
-bun run series -- advance --entry <id>          # alias: next
-bun run series -- transition --entry <id> --to watched
-bun run series -- edit-entry --entry <id> --locations Casa --platforms AppleTV
-bun run series -- abandon --entry <id> --reason "..."
-bun run series -- discard --work <id> --reason "..."
-bun run series -- sync-all
+bun run series -- --url http://localhost:3000 --token "$API_TOKEN" status
+bun run series -- --url https://<dominio-produccion> --token "$API_TOKEN" list --status completed
+bun run series -- --url https://<dominio-produccion> --token "$API_TOKEN" search "Severance"
+bun run series -- --url https://<dominio-produccion> --token "$API_TOKEN" add --tmdb tv:95396
+bun run series -- --url https://<dominio-produccion> --token "$API_TOKEN" advance --entry <id> # alias: next
+bun run series -- --url https://<dominio-produccion> --token "$API_TOKEN" transition --entry <id> --to watched
+bun run series -- --url https://<dominio-produccion> --token "$API_TOKEN" edit-entry --entry <id> --locations Casa --platforms AppleTV
+bun run series -- --url https://<dominio-produccion> --token "$API_TOKEN" abandon --entry <id> --reason "..."
+bun run series -- --url https://<dominio-produccion> --token "$API_TOKEN" discard --work <id> --reason "..."
+bun run series -- --url https://<dominio-produccion> --token "$API_TOKEN" sync-all
 ```
 
 `sync-all` lanza el worker en el servidor y espera, mostrando progreso, hasta que
@@ -64,6 +64,56 @@ worker muriese, deja de esperar a la media hora en vez de colgarse.
 Todos aceptan `--json`, que es como los usan los agentes. El flujo pensado para
 eso es: `list --status completed --json` para ver qué se ha visto ya, `search`
 para sacar el id de TMDB de cada candidata y `add --tmdb` una por una.
+
+### Atajo local `./series`
+
+Se puede crear un envoltorio Bash local llamado `series` para no repetir la URL y
+el token. El fichero `/series` está en `.gitignore` a propósito: contiene un
+secreto y nunca debe versionarse. Si no existe, créalo en la raíz del repositorio
+con este contenido, sustituye los valores de ejemplo manualmente y hazlo
+ejecutable (`chmod +x series`):
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+MODE="${1:-}"
+shift || true
+
+case "$MODE" in
+  local)
+    URL="http://localhost:3000"
+    TOKEN="pega-aqui-el-api-token-local"
+    ;;
+  prod)
+    URL="https://tu-dominio-de-produccion"
+    TOKEN="pega-aqui-el-api-token-de-produccion"
+    ;;
+  *)
+    echo "Uso: ./series <local|prod> <comando> [opciones]" >&2
+    exit 1
+    ;;
+esac
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec bun "$DIR/apps/cli/src/index.ts" --url "$URL" --token "$TOKEN" "$@"
+```
+
+Después se usa así:
+
+```text
+./series local status
+./series prod list --status completed
+./series prod search "Severance"
+./series prod add --tmdb tv:95396
+./series prod sync-all
+./series prod sync-all --no-wait --json
+```
+
+El token debe ser el mismo `API_TOKEN` configurado en el servicio correspondiente.
+No lo añadas a `.env.example`, documentación, mensajes o commits. Para rotarlo,
+actualiza primero `API_TOKEN` en el servicio y después el `TOKEN` del archivo
+local; los comandos con el token anterior dejarán de autenticar.
 
 Detrás hay una API mínima bajo `/api`, sólo con lo que la CLI necesita:
 
